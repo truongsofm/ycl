@@ -4,6 +4,7 @@ import pickle
 from time import sleep
 from tools.pick import Picker
 from tools.player import *
+from tools.lyrics import *
 from tools.youtube import *
 
 class Window(object):
@@ -52,17 +53,31 @@ class Window(object):
 		curses.endwin()
 		sys.exit(0)
 
+
+def get_sub(subtitle, time):
+	for subs in subtitle:
+		if time > subs['start'] and time < subs['end']:
+			return subs['text']
+	return ""
+
 LOOP=True
 
-def play_audio_tui(screen, url, title=None):
+def play_audio_tui( screen, url, title=None):
 	stdscr = screen.stdscr
 	stdscr.nodelay(1)
-	player = create_player(url)
-	player.toggle_pause()
 
+	h,w=stdscr.getmaxyx()
+	suburl=extract_video_sublink(url)[0]
+	if suburl:
+		w-=3
+		subtitle=fetch_sub_from_link(suburl)
+		subtext=" "*w
+	
 	control = " "
 	state = "Playing"
 	
+	player = create_player(url)
+	player.toggle_pause()
 	if title:
 		stdscr.addstr(2, 2, f"Playing {title}", curses.color_pair(1) | curses.A_BOLD)
 	
@@ -79,7 +94,11 @@ def play_audio_tui(screen, url, title=None):
 		stdscr.addstr(11, 2, "↑             : Increase Volume", curses.color_pair(3))
 		stdscr.addstr(12, 2, "↓             : Decrease Volume", curses.color_pair(3))
 		stdscr.addstr(13, 2, "q             : Quit ", curses.color_pair(3))
-
+		stdscr.hline (14,  2, curses.ACS_HLINE, curses.COLS-4)
+		# stdscr.addstr(15, 2, "Subtitles")
+		if suburl:
+			stdscr.hline (15,  2, curses.ACS_HLINE, curses.COLS-4)
+			stdscr.addstr(18, 2, subtext, curses.color_pair(4))
 
 		control = stdscr.getch()
 
@@ -117,7 +136,9 @@ def play_audio_tui(screen, url, title=None):
 				player.close_player()
 				break
 			sys.exit(0)
-			
+		if suburl:
+			subtext = get_sub(subtitle, pos)
+			subtext += " "*(w-len(subtext))
 
 
 def main():

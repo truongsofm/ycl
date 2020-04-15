@@ -2,10 +2,9 @@ import sys
 import time
 import curses
 from .youtube import *
+from tools.lyrics import *
 from time import sleep
 from ffpyplayer.player import MediaPlayer
-
-LOOP=True
 
 def rewind_callback(player, start=False):
 	if start:
@@ -67,6 +66,12 @@ def get_vol(player):
 	else:
 		return str(vol)
 
+def get_sub(subtitle, time):
+	for subs in subtitle:
+		if time > subs['start'] and time < subs['end']:
+			return subs['text']
+	return ""
+
 
 def play_audio(url, title=None):
 
@@ -77,19 +82,23 @@ def play_audio(url, title=None):
 	stdscr.keypad(True)
 	stdscr.nodelay(1)
 
+	h,w=stdscr.getmaxyx()
 	# Let user stop player gracefully
 	control = " "
+	suburl=extract_video_sublink(url)[0]
+	if suburl:
+		subtitle=fetch_sub_from_link(suburl)
+		subtext = " "*w
 	player = create_player(url)
 	player.toggle_pause()
 	state = "Playing"
-	
 	if title:
 		stdscr.addstr(1, 1, f"Playing {title}")
-	
 	try:
+		LOOP = False
 		while True:
 			pos_str, pos, dur = get_player_pos(player)
-			stdscr.addstr(3,  1, f"{state}: {pos_str}\t\tVolume: {get_vol(player)}") 
+			stdscr.addstr(3,  1, f"{state}: {pos_str}\t\tVolume: {get_vol(player)}\t\tLoop: {' on' if LOOP else 'off'}") 
 			stdscr.hline (4,  1, curses.ACS_HLINE, int(curses.COLS))
 			stdscr.addstr(5,  1, "CONTROLS : ")
 			stdscr.addstr(6,  1, "s      : STOP (Start next song in playlist)")
@@ -98,10 +107,16 @@ def play_audio(url, title=None):
 			stdscr.addstr(9,  1, "←      : Seek 10 seconds backward")
 			stdscr.addstr(10, 1, "↑      : Increase Volume")
 			stdscr.addstr(11, 1, "↓      : Decrease Volume")
-			stdscr.addstr(12, 1, "q      : Quit")
-      
+			stdscr.addstr(12, 1, "L      : Toggle loop")
+			stdscr.addstr(13, 1, "q      : Quit")
+			stdscr.hline (14,  1, curses.ACS_HLINE, int(curses.COLS))
+			# stdscr.addstr(15, 2, "Subtitles")
+			if suburl:
+				stdscr.hline (14,  1, curses.ACS_HLINE, int(curses.COLS))
+				stdscr.addstr(17, 5, subtext)
 			control = stdscr.getch()
-
+			
+			
 			if control == ord("s"):
 				player.set_pause(True)
 				player.close_player()
@@ -123,19 +138,24 @@ def play_audio(url, title=None):
 				increase_volume(player)
 			elif control == curses.KEY_DOWN:
 				decrease_volume(player)
+			elif control == ord('l'):
+				LOOP = not LOOP
 			elif control == ord('q'):
 				player.set_pause(True)
 				player.close_player()
+				del player # just to be safe
 				curses.endwin()
-				print("Quitting...\n\n")
+				# print("Quitting...\n\n")
 				sys.exit(0)
 			elif pos >= dur-1:
 				sleep(1)
 				if LOOP:
-					rewind_callback(player,start=True)
+					rewind_callback(player, start=True)
 				else:
 					player.close_player()
-					break				
+					break
+			if suburl:
+				subtext = get_sub(subtitle, pos)
+				subtext += " "*(w-len(subtext))
 	finally:
 		curses.endwin()
-		print("\rStopping player...")
